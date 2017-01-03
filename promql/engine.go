@@ -482,6 +482,11 @@ func (ng *Engine) execEvalStmt(ctx context.Context, query *query, s *EvalStmt) (
 	sort.Sort(resMatrix)
 	sortTimer.Stop()
 
+	// Take metric injection
+	injectTimer := query.stats.GetTimer(stats.MetricInjectTime).Start()
+	injectMetrics(resMatrix)
+	injectTimer.Stop()
+
 	return resMatrix, nil
 }
 
