@@ -70,15 +70,18 @@ func injectMetrics(matrix model.Matrix) {
 		// find hostname by using docker API
 		if client != nil {
 			items := strings.Split(domain, ".")
-			task := strings.Join(items[:2], ".")
-			cname := strings.Join(items[:3], ".")
-			lset = lset.Merge(model.LabelSet{
-				"__service":   model.LabelValue(items[0]),
-				"__task":      model.LabelValue(task),
-				"__container": model.LabelValue(cname),
-			})
-			if c, err := client.InspectContainer(cname); err == nil {
-				if nid, ok := c.Config.Labels["com.docker.swarm.node.id"]; ok {
+			if len(items) > 2 {
+				task := strings.Join(items[:2], ".")
+				cname := items[2]
+				lset = lset.Merge(model.LabelSet{
+					"__service":   model.LabelValue(items[0]),
+					"__task":      model.LabelValue(task),
+					"__container": model.LabelValue(cname),
+				})
+				opts := docker.ListTasksOptions{Filters: map[string][]string{}}
+				opts.Filters["id"] = []string{cname}
+				if ts, err := client.ListTasks(opts); err == nil && len(ts) > 0 {
+					nid := ts[0].NodeID
 					if node, err := client.InspectNode(nid); err == nil {
 						lset = lset.Merge(model.LabelSet{
 							"__host": model.LabelValue(node.Description.Hostname),
