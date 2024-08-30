@@ -35,7 +35,7 @@ func (ls *Labels) TTL() int {
   n := len(*ls);
   if (n == 0) { return 0; }
   l := (*ls)[n - 1];
-  if (l.Name == "_ttl_") {
+  if (l.Name == "__ttl__") {
     *ls = (*ls)[:n - 1];
     i, err := strconv.Atoi(l.Value);
     if (err == nil) {
