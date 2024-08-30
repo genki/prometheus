@@ -46,6 +46,7 @@ import (
 	"github.com/prometheus/prometheus/model/textparse"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/model/value"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/pool"
 )
@@ -123,7 +124,7 @@ const maxAheadTime = 10 * time.Minute
 // returning an empty label set is interpreted as "drop".
 type labelsMutator func(labels.Labels) labels.Labels
 
-func newScrapePool(cfg *config.ScrapeConfig, app storage.Appendable, offsetSeed uint64, logger log.Logger, buffers *pool.Pool, options *Options, metrics *scrapeMetrics) (*scrapePool, error) {
+func newScrapePool(cfg *config.ScrapeConfig, app storage.Appendable, offsetSeed uint64, logger log.Logger, buffers *pool.Pool, options *Options, metrics *scrapeMetrics, ttlTable *promql.TTLTable) (*scrapePool, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -188,6 +189,7 @@ func newScrapePool(cfg *config.ScrapeConfig, app storage.Appendable, offsetSeed 
 			metrics,
 			options.skipOffsetting,
 			opts.validationScheme,
+      ttlTable,
 		)
 	}
 	sp.metrics.targetScrapePoolTargetLimit.WithLabelValues(sp.config.JobName).Set(float64(sp.config.TargetLimit))
@@ -881,6 +883,7 @@ type scrapeLoop struct {
 	metrics *scrapeMetrics
 
 	skipOffsetting bool // For testability.
+  ttlTable *promql.TTLTable
 }
 
 // scrapeCache tracks mappings of exposed metric strings to label sets and
@@ -1165,6 +1168,7 @@ func newScrapeLoop(ctx context.Context,
 	metrics *scrapeMetrics,
 	skipOffsetting bool,
 	validationScheme model.ValidationScheme,
+  ttlTable *promql.TTLTable,
 ) *scrapeLoop {
 	if l == nil {
 		l = log.NewNopLogger()
@@ -1217,6 +1221,7 @@ func newScrapeLoop(ctx context.Context,
 		metrics:                        metrics,
 		skipOffsetting:                 skipOffsetting,
 		validationScheme:               validationScheme,
+    ttlTable:                       ttlTable,
 	}
 	sl.ctx, sl.cancel = context.WithCancel(ctx)
 
@@ -1621,6 +1626,11 @@ loop:
 			updateMetadata(lset, false)
 		} else {
 			p.Metric(&lset)
+      if sl.ttlTable != nil {
+        if (!sl.ttlTable.Check(lset)) {
+          continue
+        }
+      }
 			hash = lset.Hash()
 
 			// Hash label set as it is seen local to the target. Then add target labels

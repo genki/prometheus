@@ -830,6 +830,8 @@ func main() {
 				return time.Duration(cfgFile.GlobalConfig.RuleQueryOffset)
 			},
 		})
+
+    scrapeManager.SetTTLTable(queryEngine.GetTTLTable())
 	}
 
 	scraper.Set(scrapeManager)

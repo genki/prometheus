@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/osutil"
 	"github.com/prometheus/prometheus/util/pool"
@@ -113,6 +114,11 @@ type Manager struct {
 	triggerReload chan struct{}
 
 	metrics *scrapeMetrics
+  ttlTable *promql.TTLTable
+}
+
+func (m *Manager) SetTTLTable(ttlTable *promql.TTLTable) {
+  m.ttlTable = ttlTable
 }
 
 // Run receives and saves target set updates and triggers the scraping loops reloading.
@@ -176,7 +182,7 @@ func (m *Manager) reload() {
 				continue
 			}
 			m.metrics.targetScrapePools.Inc()
-			sp, err := newScrapePool(scrapeConfig, m.append, m.offsetSeed, log.With(m.logger, "scrape_pool", setName), m.buffers, m.opts, m.metrics)
+			sp, err := newScrapePool(scrapeConfig, m.append, m.offsetSeed, log.With(m.logger, "scrape_pool", setName), m.buffers, m.opts, m.metrics, m.ttlTable)
 			if err != nil {
 				m.metrics.targetScrapePoolsFailed.Inc()
 				level.Error(m.logger).Log("msg", "error creating new scrape pool", "err", err, "scrape_pool", setName)

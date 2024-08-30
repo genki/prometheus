@@ -240,6 +240,11 @@ func (q *query) Exec(ctx context.Context) *Result {
 		span.SetAttributes(attribute.String(queryTag, q.stmt.String()))
 	}
 
+  for _, s := range q.matrix {
+    ls := s.Metric
+    q.ng.ttlTable.Set(ls)
+  }
+
 	// Exec query.
 	res, warnings, err := q.ng.exec(ctx, q)
 	return &Result{Err: err, Value: res, Warnings: warnings}
@@ -336,6 +341,7 @@ type Engine struct {
 	enableNegativeOffset     bool
 	enablePerStepStats       bool
 	enableDelayedNameRemoval bool
+  ttlTable                 *TTLTable
 }
 
 // NewEngine returns a new engine.
@@ -427,7 +433,12 @@ func NewEngine(opts EngineOpts) *Engine {
 		enableNegativeOffset:     opts.EnableNegativeOffset,
 		enablePerStepStats:       opts.EnablePerStepStats,
 		enableDelayedNameRemoval: opts.EnableDelayedNameRemoval,
+    ttlTable:                 NewTTLTable(),
 	}
+}
+
+func (ng *Engine) GetTTLTable() *TTLTable {
+  return ng.ttlTable
 }
 
 // SetQueryLogger sets the query logger.
