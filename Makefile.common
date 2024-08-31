@@ -201,7 +201,12 @@ common-unused:
 .PHONY: common-build
 common-build: promu
 	@echo ">> building binaries"
-	$(PROMU) build --prefix $(PREFIX) $(PROMU_BINARIES)
+	#$(PROMU) build --prefix $(PREFIX) $(PROMU_BINARIES)
+	mkdir -p .build/linux-amd64
+	GOOS=linux GOARCH=amd64 \
+	go build -o .build/linux-amd64/prometheus cmd/prometheus/main.go
+	GOOS=linux GOARCH=amd64 \
+	go build -o .build/linux-amd64/promtool cmd/promtool/*.go
 
 .PHONY: common-tarball
 common-tarball: promu

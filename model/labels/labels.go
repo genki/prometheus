@@ -18,7 +18,6 @@ package labels
 import (
 	"bytes"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/cespare/xxhash/v2"
@@ -31,19 +30,6 @@ type Labels []Label
 func (ls Labels) Len() int           { return len(ls) }
 func (ls Labels) Swap(i, j int)      { ls[i], ls[j] = ls[j], ls[i] }
 func (ls Labels) Less(i, j int) bool { return ls[i].Name < ls[j].Name }
-func (ls *Labels) TTL() int {
-  n := len(*ls);
-  if (n == 0) { return 0; }
-  l := (*ls)[n - 1];
-  if (l.Name == "__ttl__") {
-    *ls = (*ls)[:n - 1];
-    i, err := strconv.Atoi(l.Value);
-    if (err == nil) {
-      return i
-    }
-  }
-  return 0;
-}
 
 // Bytes returns ls as a byte slice.
 // It uses an byte invalid character as a separator and so should not be used for printing.

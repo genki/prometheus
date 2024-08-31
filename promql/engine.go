@@ -239,12 +239,6 @@ func (q *query) Exec(ctx context.Context) *Result {
 	if span := trace.SpanFromContext(ctx); span != nil {
 		span.SetAttributes(attribute.String(queryTag, q.stmt.String()))
 	}
-
-  for _, s := range q.matrix {
-    ls := s.Metric
-    q.ng.ttlTable.Set(ls)
-  }
-
 	// Exec query.
 	res, warnings, err := q.ng.exec(ctx, q)
 	return &Result{Err: err, Value: res, Warnings: warnings}
@@ -323,6 +317,8 @@ type EngineOpts struct {
 	// This is useful in certain scenarios where the __name__ label must be preserved or where applying a
 	// regex-matcher to the __name__ label may otherwise lead to duplicate labelset errors.
 	EnableDelayedNameRemoval bool
+  // The default TTL in seconds for subscriptions
+  DefaultTTLSecs int
 }
 
 // Engine handles the lifetime of queries from beginning to end.
@@ -341,7 +337,7 @@ type Engine struct {
 	enableNegativeOffset     bool
 	enablePerStepStats       bool
 	enableDelayedNameRemoval bool
-  ttlTable                 *TTLTable
+  subsTable                *SubsTable
 }
 
 // NewEngine returns a new engine.
@@ -433,12 +429,12 @@ func NewEngine(opts EngineOpts) *Engine {
 		enableNegativeOffset:     opts.EnableNegativeOffset,
 		enablePerStepStats:       opts.EnablePerStepStats,
 		enableDelayedNameRemoval: opts.EnableDelayedNameRemoval,
-    ttlTable:                 NewTTLTable(),
+    subsTable:                NewSubsTable(opts.Logger, opts.DefaultTTLSecs),
 	}
 }
 
-func (ng *Engine) GetTTLTable() *TTLTable {
-  return ng.ttlTable
+func (ng *Engine) GetSubsTable() *SubsTable {
+  return ng.subsTable
 }
 
 // SetQueryLogger sets the query logger.
@@ -710,7 +706,7 @@ func (ng *Engine) execEvalStmt(ctx context.Context, query *query, s *parser.Eval
 	}
 	defer querier.Close()
 
-	ng.populateSeries(ctxPrepare, querier, s)
+	ng.populateSeries(ctxPrepare, querier, s, ng.subsTable)
 	prepareSpanTimer.Finish()
 
 	// Modify the offset of vector and matrix selectors for the @ modifier
@@ -934,7 +930,7 @@ func (ng *Engine) getLastSubqueryInterval(path []parser.Node) time.Duration {
 	return interval
 }
 
-func (ng *Engine) populateSeries(ctx context.Context, querier storage.Querier, s *parser.EvalStmt) {
+func (ng *Engine) populateSeries(ctx context.Context, querier storage.Querier, s *parser.EvalStmt, subsTable *SubsTable) {
 	// Whenever a MatrixSelector is evaluated, evalRange is set to the corresponding range.
 	// The evaluation of the VectorSelector inside then evaluates the given range and unsets
 	// the variable.
@@ -943,6 +939,25 @@ func (ng *Engine) populateSeries(ctx context.Context, querier storage.Querier, s
 	parser.Inspect(s.Expr, func(node parser.Node, path []parser.Node) error {
 		switch n := node.(type) {
 		case *parser.VectorSelector:
+      ls := labels.Labels{}
+      lm := []*labels.Matcher{}
+      var ttl = subsTable.defaultTTL
+      for _, m := range n.LabelMatchers {
+        if (m.Name == "__ttl__") {
+          ttl_, err := strconv.Atoi(m.Value)
+          ttl = ttl_
+          if (err == nil) {continue}
+        }
+        // append the label to the list of labels
+        ls = append(ls, labels.Label{Name: m.Name, Value: m.Value})
+        lm = append(lm, m)
+      }
+      //ls = append(ls, labels.Label{Name: "__name__", Value: n.Name})
+      if ttl > 0 {
+        subsTable.Set(ls, ttl);
+      }
+      n.LabelMatchers = lm
+
 			start, end := getTimeRangesForSelector(s, n, path, evalRange)
 			interval := ng.getLastSubqueryInterval(path)
 			if interval == 0 {

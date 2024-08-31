@@ -124,7 +124,7 @@ const maxAheadTime = 10 * time.Minute
 // returning an empty label set is interpreted as "drop".
 type labelsMutator func(labels.Labels) labels.Labels
 
-func newScrapePool(cfg *config.ScrapeConfig, app storage.Appendable, offsetSeed uint64, logger log.Logger, buffers *pool.Pool, options *Options, metrics *scrapeMetrics, ttlTable *promql.TTLTable) (*scrapePool, error) {
+func newScrapePool(cfg *config.ScrapeConfig, app storage.Appendable, offsetSeed uint64, logger log.Logger, buffers *pool.Pool, options *Options, metrics *scrapeMetrics, subsTable *promql.SubsTable) (*scrapePool, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -189,7 +189,7 @@ func newScrapePool(cfg *config.ScrapeConfig, app storage.Appendable, offsetSeed 
 			metrics,
 			options.skipOffsetting,
 			opts.validationScheme,
-      ttlTable,
+      subsTable,
 		)
 	}
 	sp.metrics.targetScrapePoolTargetLimit.WithLabelValues(sp.config.JobName).Set(float64(sp.config.TargetLimit))
@@ -883,7 +883,7 @@ type scrapeLoop struct {
 	metrics *scrapeMetrics
 
 	skipOffsetting bool // For testability.
-  ttlTable *promql.TTLTable
+  subsTable *promql.SubsTable
 }
 
 // scrapeCache tracks mappings of exposed metric strings to label sets and
@@ -1168,7 +1168,7 @@ func newScrapeLoop(ctx context.Context,
 	metrics *scrapeMetrics,
 	skipOffsetting bool,
 	validationScheme model.ValidationScheme,
-  ttlTable *promql.TTLTable,
+  subsTable *promql.SubsTable,
 ) *scrapeLoop {
 	if l == nil {
 		l = log.NewNopLogger()
@@ -1221,7 +1221,7 @@ func newScrapeLoop(ctx context.Context,
 		metrics:                        metrics,
 		skipOffsetting:                 skipOffsetting,
 		validationScheme:               validationScheme,
-    ttlTable:                       ttlTable,
+    subsTable:                       subsTable,
 	}
 	sl.ctx, sl.cancel = context.WithCancel(ctx)
 
@@ -1618,6 +1618,11 @@ loop:
 		)
 
 		if ok {
+      if sl.subsTable != nil {
+        if (!sl.subsTable.Check(ce.lset)) {
+          continue
+        }
+      }
 			ref = ce.ref
 			lset = ce.lset
 			hash = ce.hash
@@ -1626,8 +1631,8 @@ loop:
 			updateMetadata(lset, false)
 		} else {
 			p.Metric(&lset)
-      if sl.ttlTable != nil {
-        if (!sl.ttlTable.Check(lset)) {
+      if sl.subsTable != nil {
+        if (!sl.subsTable.Check(lset)) {
           continue
         }
       }

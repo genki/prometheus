@@ -171,6 +171,7 @@ type flagConfig struct {
 	promlogConfig promlog.Config
 
 	promqlEnableDelayedNameRemoval bool
+  defaultTTLSecs int
 }
 
 // setFeatureListOptions sets the corresponding options from the featureList.
@@ -486,6 +487,9 @@ func main() {
 
 	serverOnlyFlag(a, "query.max-samples", "Maximum number of samples a single query can load into memory. Note that queries will fail if they try to load more samples than this into memory, so this also limits the number of samples a query can return.").
 		Default("50000000").IntVar(&cfg.queryMaxSamples)
+
+  serverOnlyFlag(a, "query.default-ttl", "Default TTL in seconds for the query subscription").
+    Default("0").IntVar(&cfg.defaultTTLSecs)
 
 	a.Flag("scrape.discovery-reload-interval", "Interval used by scrape manager to throttle target groups updates.").
 		Hidden().Default("5s").SetValue(&cfg.scrape.DiscoveryReloadInterval)
@@ -808,6 +812,7 @@ func main() {
 			EnableNegativeOffset:     true,
 			EnablePerStepStats:       cfg.enablePerStepStats,
 			EnableDelayedNameRemoval: cfg.promqlEnableDelayedNameRemoval,
+      DefaultTTLSecs:           cfg.defaultTTLSecs,
 		}
 
 		queryEngine = promql.NewEngine(opts)
@@ -831,7 +836,7 @@ func main() {
 			},
 		})
 
-    scrapeManager.SetTTLTable(queryEngine.GetTTLTable())
+    scrapeManager.SetSubsTable(queryEngine.GetSubsTable())
 	}
 
 	scraper.Set(scrapeManager)

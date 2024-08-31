@@ -114,11 +114,11 @@ type Manager struct {
 	triggerReload chan struct{}
 
 	metrics *scrapeMetrics
-  ttlTable *promql.TTLTable
+  subsTable *promql.SubsTable
 }
 
-func (m *Manager) SetTTLTable(ttlTable *promql.TTLTable) {
-  m.ttlTable = ttlTable
+func (m *Manager) SetSubsTable(subsTable *promql.SubsTable) {
+  m.subsTable = subsTable
 }
 
 // Run receives and saves target set updates and triggers the scraping loops reloading.
@@ -182,7 +182,7 @@ func (m *Manager) reload() {
 				continue
 			}
 			m.metrics.targetScrapePools.Inc()
-			sp, err := newScrapePool(scrapeConfig, m.append, m.offsetSeed, log.With(m.logger, "scrape_pool", setName), m.buffers, m.opts, m.metrics, m.ttlTable)
+			sp, err := newScrapePool(scrapeConfig, m.append, m.offsetSeed, log.With(m.logger, "scrape_pool", setName), m.buffers, m.opts, m.metrics, m.subsTable)
 			if err != nil {
 				m.metrics.targetScrapePoolsFailed.Inc()
 				level.Error(m.logger).Log("msg", "error creating new scrape pool", "err", err, "scrape_pool", setName)
